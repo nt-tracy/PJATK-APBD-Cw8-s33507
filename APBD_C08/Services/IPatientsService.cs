@@ -1,7 +1,10 @@
-﻿namespace APBD_C08.Services;
+﻿using APBD_C08.DTOs;
 
-public interface IHospitalService
+namespace APBD_C08.Services;
+
+public interface IPatientsService
 {
-    
-    
+    Task<IEnumerable<PatientDetailsResponse>> GetPatientsAsync(string? search, CancellationToken cancellationToken);
+    Task<BedAssignmentResponse> AssignBedAsync(string pesel, CreateBedAssignmentRequest request, CancellationToken cancellationToken);
+
 }
