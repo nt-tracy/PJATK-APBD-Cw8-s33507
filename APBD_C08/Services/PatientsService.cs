@@ -72,9 +72,77 @@ public class PatientsService(MyDbContext ctx) : IPatientsService
     }
 
 
-    public async Task<BedAssignmentResponse> AssignBedAsync(string pesel, CreateBedAssignmentRequest request, CancellationToken cancellationToken)
+    public async Task<BedAssignmentResponse> AssignBedAsync(string pesel, CreateBedAssignmentRequest request,
+        CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        var patientExists = await ctx.Patients.AnyAsync(p => p.Pesel == pesel, cancellationToken);
+        if (!patientExists)
+        {
+            throw new NotFoundException($"Patient with PESEL {pesel} does not exist.");
+        }
+
+        var ward = await ctx.Wards.FirstOrDefaultAsync(w => w.Name == request.Ward, cancellationToken);
+        if (ward == null)
+        {
+            throw new NotFoundException($"Ward '{request.Ward}' does not exist.");
+        }
+
+        var bedType = await ctx.BedTypes.FirstOrDefaultAsync(bt => bt.Name == request.BedType, cancellationToken);
+        if (bedType == null)
+        {
+            throw new NotFoundException($"Bed type '{request.BedType}' does not exist.");
+        }
+
+        var candidateBeds = await ctx.Beds
+            .Where(b => b.BedTypeId == bedType.Id && b.Room.WardId == ward.Id)
+            .ToListAsync(cancellationToken);
+
+        if (!candidateBeds.Any())
+        {
+            throw new NotFoundException($"No beds found for type '{request.BedType}' in ward '{request.Ward}'.");
+        }
+
+        Bed? availableBed = null;
+        DateTime requestTo = request.To ?? DateTime.MaxValue;
+
+        foreach (var bed in candidateBeds)
+        {
+            var isOccupied = await ctx.BedAssignments
+                .AnyAsync(ba => ba.BedId == bed.Id &&
+                                ba.From < requestTo &&
+                                (ba.To ?? DateTime.MaxValue) > request.From,
+                    cancellationToken);
+
+            if (!isOccupied)
+            {
+                availableBed = bed;
+                break;
+            }
+        }
+
+        if (availableBed == null)
+        {
+            throw new NotFoundException(
+                $"All beds of type '{request.BedType}' in ward '{request.Ward}' are occupied during the requested period.");
+        }
+
+        var newAssignment = new BedAssignment
+        {
+            PatientPesel = pesel,
+            BedId = availableBed.Id,
+            From = request.From,
+            To = request.To
+        };
+
+        await ctx.BedAssignments.AddAsync(newAssignment, cancellationToken);
+        await ctx.SaveChangesAsync(cancellationToken);
+
+        return new BedAssignmentResponse
+        {
+            From = newAssignment.From,
+            To = newAssignment.To,
+            BedType = bedType.Name,
+            Ward = ward.Name
+        };
     }
-    
 }
