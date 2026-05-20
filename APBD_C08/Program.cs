@@ -1,4 +1,13 @@
+using APBD_C08.Context;
+using APBD_C08.Services;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("Default");
+builder.Services.AddDbContext<MyDbContext>(opt => opt.UseSqlServer(connectionString));
+builder.Services.AddScoped<IPatientsService, PatientsService>();
+
 
 // Dodawanie kontrolerów itp.
 builder.Services.AddControllers();
